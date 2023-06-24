@@ -34,15 +34,17 @@ for i in range(0, 5):
     X += 2 * rng.uniform(size=X.shape)
     linearly_separable = (X, y)
 
-    data_names.append('moons_%i' % i)
-    data_names.append('circles_%i' % i)
-    data_names.append('linsep_%i' % i)
-    data_names.append('hastie_%i' % i)
-    datasets.append(make_moons(noise=0.3, random_state=i))
-    datasets.append(make_circles(noise=0.2, factor=0.5, random_state=i))
-    datasets.append(linearly_separable)
-    datasets.append(make_hastie_10_2(1000, random_state=i))
-
+    data_names.extend(
+        ('moons_%i' % i, 'circles_%i' % i, 'linsep_%i' % i, 'hastie_%i' % i)
+    )
+    datasets.extend(
+        (
+            make_moons(noise=0.3, random_state=i),
+            make_circles(noise=0.2, factor=0.5, random_state=i),
+            linearly_separable,
+            make_hastie_10_2(1000, random_state=i),
+        )
+    )
 results = pd.DataFrame(index=data_names, columns=clf_names)
 
 for data_name, data in zip(data_names, datasets):
@@ -51,7 +53,7 @@ for data_name, data in zip(data_names, datasets):
     scores = []
     # iterate over classifiers
     for clf_name, clf in zip(clf_names, classifiers):
-        print("Applying %s to %s" % (clf_name, data_name))
+        print(f"Applying {clf_name} to {data_name}")
         res = cross_val_score(estimator=clf, X=X, y=y, cv=10, scoring='accuracy')
         results.at[data_name, clf_name] = res.mean()
 
