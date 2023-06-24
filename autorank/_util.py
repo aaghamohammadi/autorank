@@ -126,11 +126,7 @@ def _cliffs_delta(x, y):
             elif x_val > y_val:
                 result += 1
         delta += result / len(y)
-    if abs(delta) < 10e-16:
-        # due to minor rounding errors
-        delta = 0
-    else:
-        delta = delta / len(x)
+    delta = 0 if abs(delta) < 10e-16 else delta / len(x)
     return delta
 
 
@@ -152,7 +148,7 @@ def _effect_level(effect_size, method='cohen_d'):
             return 'medium'
         else:
             return 'large'
-    if method == 'cohen_d' or method == 'akinshin_gamma':
+    if method in ['cohen_d', 'akinshin_gamma']:
         if effect_size < 0.2:
             return 'negligible'
         elif effect_size < 0.5:
@@ -205,14 +201,12 @@ def _posterior_decision(probabilities, alpha):
             return 'larger'
         else:
             return 'inconclusive'
+    elif probabilities[0] >= 1 - alpha:
+        return 'smaller'
+    elif probabilities[1] >= 1 - alpha:
+        return 'larger'
     else:
-        # without ROPE (i.e., rope=0)
-        if probabilities[0] >= 1 - alpha:
-            return 'smaller'
-        elif probabilities[1] >= 1 - alpha:
-            return 'larger'
-        else:
-            return 'inconclusive'
+        return 'inconclusive'
 
 
 def rank_two(data, alpha, verbose, all_normal, order, effect_size, force_mode):
@@ -305,10 +299,7 @@ def rank_multiple_nonparametric(data, alpha, verbose, all_normal, order, effect_
 
 def rank_bayesian(data, alpha, verbose, all_normal, order, rope, rope_mode, nsamples, effect_size):
     # TODO check if some outputs for the verbose mode would be helpful
-    if all_normal:
-        order_column = 'mean'
-    else:
-        order_column = 'median'
+    order_column = 'mean' if all_normal else 'median'
     result_df, effsize_method, reorder_pos = _create_result_df_skeleton(data, alpha/len(data.columns), all_normal,
                                                                         order, order_column, effect_size)
     result_df = result_df.drop('meanrank', axis='columns')
@@ -353,19 +344,16 @@ def _create_result_df_skeleton(data, alpha, all_normal, order, order_column='mea
     Creates data frame for results. CI may be left empty in case alpha is None
     """
     if effect_size is None:
-        if all_normal:
-            effsize_method = 'cohen_d'
-        else:
-            effsize_method = 'akinshin_gamma'
+        effsize_method = 'cohen_d' if all_normal else 'akinshin_gamma'
     else:
         effsize_method = effect_size
 
     asc = None
-    if order == 'descending':
-        asc = False
-    elif order == 'ascending':
+    if order == 'ascending':
         asc = True
 
+    elif order == 'descending':
+        asc = False
     rankmat = data.rank(axis='columns', ascending=asc)
     meanranks = rankmat.mean()
     if (force_mode is not None and force_mode=='parametric') or (force_mode is None and all_normal):
@@ -461,10 +449,7 @@ def cd_diagram(result, reverse, ax, width):
     scalewidth = width - 2 * textspace
 
     def rankpos(rank):
-        if not reverse:
-            relative_rank = rank - lowv
-        else:
-            relative_rank = highv - rank
+        relative_rank = rank - lowv if not reverse else highv - rank
         return textspace + scalewidth / (highv - lowv) * relative_rank
 
     linesblank = 0.2 + 0.2 + (len(groups) - 1) * 0.1
@@ -556,10 +541,7 @@ def ci_plot(result, reverse, ax, width):
     """
     Uses error bars to create a plot of the confidence intervals of the mean value.
     """
-    if reverse:
-        sorted_df = result.rankdf.iloc[::-1]
-    else:
-        sorted_df = result.rankdf
+    sorted_df = result.rankdf.iloc[::-1] if reverse else result.rankdf
     sorted_means = sorted_df['mean']
     ci_lower = sorted_df.ci_lower
     ci_upper = sorted_df.ci_upper

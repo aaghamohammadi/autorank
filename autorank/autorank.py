@@ -242,7 +242,9 @@ def autorank(data, alpha=0.05, verbose=False, order='descending', approach='freq
             raise ValueError("force_mode must be None or one of the following 'parametric', 'nonparametric'")
 
     if force_mode is not None and approach=='frequentist':
-        print("Tests for normality and homoscedacity are ignored for test selection, forcing %s tests" % force_mode)
+        print(
+            f"Tests for normality and homoscedacity are ignored for test selection, forcing {force_mode} tests"
+        )
 
 
     # Bonferoni correction for normality tests
@@ -272,12 +274,11 @@ def autorank(data, alpha=0.05, verbose=False, order='descending', approach='freq
 
         if len(data.columns) == 2:
             res = rank_two(data, alpha, verbose, all_normal, order, effect_size, force_mode)
-        else:
-            if (force_mode is not None and force_mode=='parametric') or \
+        elif (force_mode is not None and force_mode=='parametric') or \
                (force_mode is None and all_normal and var_equal):
-                res = rank_multiple_normal_homoscedastic(data, alpha, verbose, order, effect_size, force_mode)
-            else:
-                res = rank_multiple_nonparametric(data, alpha, verbose, all_normal, order, effect_size, force_mode)
+            res = rank_multiple_normal_homoscedastic(data, alpha, verbose, order, effect_size, force_mode)
+        else:
+            res = rank_multiple_nonparametric(data, alpha, verbose, all_normal, order, effect_size, force_mode)
         # need to reorder pvals here (see issue #7)
         pvals_shapiro = [pvals_shapiro[pos] for pos in res.reorder_pos]
         return RankResult(res.rankdf, res.pvalue, res.cd, res.omnibus, res.posthoc, all_normal, pvals_shapiro,
@@ -343,12 +344,14 @@ def plot_stats(result, *, allow_insignificant=False, ax=None, width=None):
     if width is None:
         width = 6
 
-    if result.omnibus == 'ttest':
+    if (
+        result.omnibus == 'ttest'
+        or result.omnibus != 'wilcoxon'
+        and result.posthoc == 'tukeyhsd'
+    ):
         ax = ci_plot(result, True, ax, width)
     elif result.omnibus == 'wilcoxon':
         warnings.warn('No plot to visualize statistics for Wilcoxon test available. Doing nothing.')
-    elif result.posthoc == 'tukeyhsd':
-        ax = ci_plot(result, True, ax, width)
     elif result.posthoc == 'nemenyi':
         ax = cd_diagram(result, True, ax, width)
     return ax
@@ -385,7 +388,7 @@ def create_report(result, *, decimal_places=3):
                 mystats.append("MAD=%.*f" % (decimal_places, result.rankdf.at[population, 'mad']))
             if with_rank:
                 mystats.append("MR=%.*f" % (decimal_places, result.rankdf.at[population, 'meanrank']))
-            return "%s (%s)" % (population, ", ".join(mystats))
+            return f'{population} ({", ".join(mystats)})'
         else:
             return str(population)
 
@@ -394,10 +397,7 @@ def create_report(result, *, decimal_places=3):
             populations = [populations]
         population_strings = []
         for index, population in enumerate(populations):
-            if pop_pvals is not None:
-                cur_pval = pop_pvals[index]
-            else:
-                cur_pval = None
+            cur_pval = pop_pvals[index] if pop_pvals is not None else None
             population_strings.append(single_population_string(population, with_stats, cur_pval, with_rank))
         if len(populations) == 1:
             popstr = population_strings[0]
@@ -430,10 +430,7 @@ def create_report(result, *, decimal_places=3):
                 pvals.append(pval)
             else:
                 normal.append(result.rankdf.index[i])
-        if len(not_normal) == 1:
-            population_term = 'population'
-        else:
-            population_term = 'populations'
+        population_term = 'population' if len(not_normal) == 1 else 'populations'
         print("We rejected the null hypothesis that the population is normal for the %s %s. "
               "Therefore, we assume that not all populations are "
               "normal." % (population_term, create_population_string(not_normal, pop_pvals=pvals)))
@@ -492,9 +489,9 @@ def create_report(result, *, decimal_places=3):
                 for j in range(i + 1, len(result.rankdf)):
                     if result.decision_matrix.iloc[i, j] == 'equal':
                         equal_pairs.append(result.rankdf.index[i] + ' and ' + result.rankdf.index[j])
-            if len(equal_pairs) > 0:
+            if equal_pairs:
                 equal_pairs_str = create_population_string(equal_pairs).replace(',', ';')
-                print('The following pairs of populations are equal: %s.' % equal_pairs_str)
+                print(f'The following pairs of populations are equal: {equal_pairs_str}.')
             if 'inconclusive' in set(result.rankdf['decision']):
                 print('All other differences are inconclusive.')
     elif len(result.rankdf) == 2:
@@ -506,7 +503,9 @@ def create_report(result, *, decimal_places=3):
         elif result.effect_size == 'akinshin_gamma':
             effect_size = 'gamma'
         else:
-            raise ValueError('unknown effect size method, this should not be possible: %s' % result.effect_size)
+            raise ValueError(
+                f'unknown effect size method, this should not be possible: {result.effect_size}'
+            )
         if result.omnibus == 'ttest':
             if result.all_normal:
                 print("Because we have only two populations and both populations are normal, we use the t-test to "
@@ -570,7 +569,9 @@ def create_report(result, *, decimal_places=3):
                          result.rankdf.index[0], result.rankdf.index[1],
                          result.rankdf.magnitude[1], effect_size, decimal_places, result.rankdf.effect_size[1]))
         else:
-            raise ValueError('Unknown omnibus test for difference in the central tendency: %s' % result.omnibus)
+            raise ValueError(
+                f'Unknown omnibus test for difference in the central tendency: {result.omnibus}'
+            )
     else:
         if result.all_normal:
             if result.homoscedastic:
@@ -714,7 +715,9 @@ def create_report(result, *, decimal_places=3):
                           "within the following groups: %s. All other differences are "
                           "significant." % ("; ".join(groupstrs)))
         else:
-            raise ValueError('Unknown omnibus test for difference in the central tendency: %s' % result.omnibus)
+            raise ValueError(
+                f'Unknown omnibus test for difference in the central tendency: {result.omnibus}'
+            )
 
 
 def latex_table(result, *, decimal_places=3, label=None):
@@ -737,8 +740,14 @@ def latex_table(result, *, decimal_places=3, label=None):
 
     table_df = result.rankdf
     columns = table_df.columns.to_list()
-    if result.omnibus != 'bayes' and result.pvalue >= result.alpha or \
-       result.omnibus == 'bayes' and len({'smaller', 'larger'}.intersection(set(result.rankdf['decision']))) == 0:
+    if (
+        result.omnibus != 'bayes'
+        and result.pvalue >= result.alpha
+        or result.omnibus == 'bayes'
+        and not {'smaller', 'larger'}.intersection(
+            set(result.rankdf['decision'])
+        )
+    ):
         columns.remove('effect_size')
         columns.remove('magnitude')
     if result.posthoc == 'tukeyhsd':
@@ -747,12 +756,12 @@ def latex_table(result, *, decimal_places=3, label=None):
     columns.remove('ci_lower')
     columns.remove('ci_upper')
     rename_map = {}
-    if result.effect_size == 'cohen_d':
-        rename_map['effect_size'] = '$d$'
+    if result.effect_size == 'akinshin_gamma':
+        rename_map['effect_size'] = r'G-A-M-M-A'
     elif result.effect_size == 'cliff_delta':
         rename_map['effect_size'] = r'D-E-L-T-A'
-    elif result.effect_size == 'akinshin_gamma':
-        rename_map['effect_size'] = r'G-A-M-M-A'
+    elif result.effect_size == 'cohen_d':
+        rename_map['effect_size'] = '$d$'
     rename_map['magnitude'] = 'Magnitude'
     rename_map['mad'] = 'MAD'
     rename_map['median'] = 'MED'
@@ -834,7 +843,11 @@ def latex_report(result, *, decimal_places=3, prefix="", generate_plots=True, fi
     print()
 
     if len(result.rankdf) > 2:
-        latex_table(result, decimal_places=decimal_places, label='tbl:%sstat_results' % prefix)
+        latex_table(
+            result,
+            decimal_places=decimal_places,
+            label=f'tbl:{prefix}stat_results',
+        )
         print()
 
     if result.omnibus != 'wilcoxon' and result.omnibus != 'bayes' and generate_plots and result.pvalue < result.alpha:
@@ -842,7 +855,7 @@ def latex_report(result, *, decimal_places=3, prefix="", generate_plots=True, fi
         plot_stats(result)
         if len(figure_path) > 0 and not figure_path.endswith("/"):
             figure_path += '/'
-        figure_path = "%s%sstat_results.pdf" % (figure_path, prefix)
+        figure_path = f"{figure_path}{prefix}stat_results.pdf"
         plt.savefig(figure_path)
 
         print(r"\begin{figure}[h]")
@@ -850,7 +863,7 @@ def latex_report(result, *, decimal_places=3, prefix="", generate_plots=True, fi
         if result.posthoc == 'nemenyi':
             print(r"\caption{CD diagram to visualize the results of the Nemenyi post-hoc test. The horizontal lines "
                   r"indicate that differences are not significant.}")
-        elif result.posthoc == 'TukeyHSD' or result.posthoc == 'ttest':
+        elif result.posthoc in ['TukeyHSD', 'ttest']:
             print(r"\caption{Confidence intervals and mean values of the populations.}")
         else:
             # fallback in case of unknown post-hoc test. should not happen
